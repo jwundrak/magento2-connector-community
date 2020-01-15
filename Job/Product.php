@@ -11,6 +11,7 @@ use Magento\Catalog\Model\Product\Visibility;
 use Magento\Catalog\Model\Product as BaseProductModel;
 use Magento\Catalog\Model\Category as CategoryModel;
 use Magento\Eav\Model\Config as EavConfig;
+use Magento\Eav\Model\ResourceModel\Entity\Attribute as EavAttribute;
 use Magento\Framework\App\Cache\Type\Block;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\DB\Adapter\AdapterInterface;
@@ -149,6 +150,12 @@ class Product extends Import
      */
     protected $eavConfig;
     /**
+     * This variable contains an EavAttribute
+     *
+     * @var  EavConfig $eavConfig
+     */
+    protected $eavAttribute;
+    /**
      * This variable contains a ProductFilters
      *
      * @var ProductFilters $productFilters
@@ -236,6 +243,7 @@ class Product extends Import
      * @param ProductImportHelper     $entitiesHelper
      * @param ConfigHelper            $configHelper
      * @param EavConfig               $eavConfig
+     * @param EavAttribute            $eavAttribute
      * @param ProductFilters          $productFilters
      * @param ScopeConfigInterface    $scopeConfig
      * @param JsonSerializer          $serializer
@@ -256,6 +264,7 @@ class Product extends Import
         ProductImportHelper $entitiesHelper,
         ConfigHelper $configHelper,
         EavConfig $eavConfig,
+        EavAttribute $eavAttribute,
         ProductFilters $productFilters,
         ScopeConfigInterface $scopeConfig,
         JsonSerializer $serializer,
@@ -275,6 +284,7 @@ class Product extends Import
         $this->entitiesHelper          = $entitiesHelper;
         $this->configHelper            = $configHelper;
         $this->eavConfig               = $eavConfig;
+        $this->eavAttribute            = $eavAttribute;
         $this->productFilters          = $productFilters;
         $this->scopeConfig             = $scopeConfig;
         $this->serializer              = $serializer;
@@ -1123,6 +1133,31 @@ class Product extends Import
         if ($connection->tableColumnExists($tmpTable, 'enabled')) {
             $values[0]['status'] = '_status';
         }
+
+        // Set products status
+        /** @var string $statusAttributeId */
+        $statusAttributeId = $this->eavAttribute->getIdByCode('catalog_product', 'status');
+        /** @var string $identifierColumn */
+        $identifierColumn = $this->entitiesHelper->getColumnIdentifier('catalog_product_entity_int');
+        /** @var string[] $columnsForStatus */
+        $columnsForStatus = ['entity_id' => 'a._entity_id', '_is_new' => 'a._is_new'];
+        $select           = $connection->select()->from(['a' => $tmpTable], $columnsForStatus)->joinInner(
+            ['b' => $this->entitiesHelper->getTable('catalog_product_entity_int')],
+            'a._entity_id = b.' . $identifierColumn
+        )->where('a._is_new = ?', 0)->where('b.attribute_id = ?', $statusAttributeId);
+        $oldStatus        = $connection->query($select);
+        while (($row = $oldStatus->fetch())) {
+            $valuesToInsert = [
+                '_status' => $row['value'],
+            ];
+            $connection->update($tmpTable, $valuesToInsert, ['_entity_id = ?' => $row['entity_id']]);
+        }
+
+        $connection->update(
+            $tmpTable,
+            ['_status' => $this->configHelper->getProductActivation()],
+            ['_is_new = ?' => 1]
+        );
 
         /** @var mixed[] $taxClasses */
         $taxClasses = $this->configHelper->getProductTaxClasses();
