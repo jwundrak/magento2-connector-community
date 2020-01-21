@@ -29,6 +29,8 @@
             <product>
                 <url_generation_enabled>1</url_generation_enabled>
                 <activation>2</activation>
+                <product_model_batch_size>500</product_model_batch_size>
+                <product_model_update_length>5000</product_model_update_length>
             </product>
             <category>
                 <is_active>1</is_active>

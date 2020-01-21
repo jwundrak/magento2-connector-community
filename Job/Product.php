@@ -29,13 +29,11 @@ use Akeneo\Connector\Helper\Authenticator;
 use Akeneo\Connector\Helper\Config as ConfigHelper;
 use Akeneo\Connector\Helper\Output as OutputHelper;
 use Akeneo\Connector\Helper\Store as StoreHelper;
-use Akeneo\Connector\Helper\Locales as LocalesHelper;
 use Akeneo\Connector\Helper\ProductFilters;
 use Akeneo\Connector\Helper\Serializer as JsonSerializer;
 use Akeneo\Connector\Helper\Import\Product as ProductImportHelper;
 use Akeneo\Connector\Job\Option as JobOption;
 use Akeneo\Connector\Model\Source\Attribute\Metrics as AttributeMetrics;
-use Magento\Backend\Model\Locale\Manager as LocaleManager;
 use Zend_Db_Expr as Expr;
 use Zend_Db_Statement_Pdo;
 
@@ -204,23 +202,11 @@ class Product extends Import
      */
     protected $storeHelper;
     /**
-     * This variable contains a LocalesHelper
-     *
-     * @var LocalesHelper $localesHelper
-     */
-    protected $localesHelper;
-    /**
      * This variable contains a JobOption
      *
      * @var JobOption $jobOption
      */
     protected $jobOption;
-    /**
-     * This variable contains a LocaleManager
-     *
-     * @var LocaleManager $localeManager
-     */
-    protected $localeManager;
     /**
      * This variable contains an AttributeMetrics
      *
@@ -251,8 +237,6 @@ class Product extends Import
      * @param ProductUrlPathGenerator $productUrlPathGenerator
      * @param TypeListInterface       $cacheTypeList
      * @param StoreHelper             $storeHelper
-     * @param LocalesHelper           $localesHelper
-     * @param LocaleManager           $localeManager
      * @param AttributeMetrics        $attributeMetrics
      * @param StoreManagerInterface   $storeManager
      * @param array                   $data
@@ -272,9 +256,7 @@ class Product extends Import
         ProductUrlPathGenerator $productUrlPathGenerator,
         TypeListInterface $cacheTypeList,
         StoreHelper $storeHelper,
-        LocalesHelper $localesHelper,
         JobOption $jobOption,
-        LocaleManager $localeManager,
         AttributeMetrics $attributeMetrics,
         StoreManagerInterface $storeManager,
         array $data = []
@@ -291,9 +273,7 @@ class Product extends Import
         $this->product                 = $product;
         $this->cacheTypeList           = $cacheTypeList;
         $this->storeHelper             = $storeHelper;
-        $this->localesHelper           = $localesHelper;
         $this->jobOption               = $jobOption;
-        $this->localeManager           = $localeManager;
         $this->productUrlPathGenerator = $productUrlPathGenerator;
         $this->attributeMetrics        = $attributeMetrics;
         $this->storeManager            = $storeManager;
@@ -394,7 +374,7 @@ class Product extends Import
                         /** @var string|false $symbol */
                         $symbol = array_key_exists($unit, $metricSymbols);
 
-                        if (!array_key_exists($unit, $metricSymbols)) {
+                        if (!$symbol) {
                             continue;
                         }
 
@@ -630,14 +610,13 @@ class Product extends Import
         $tmpTable = $this->entitiesHelper->getTableName($this->getCode());
         /** @var mixed[] $metricsVariantSettings */
         $metricsVariantSettings = $this->configHelper->getMetricsColumns(true);
-        /** @var string[] $metricsSymbols */
-        $metricsSymbols = $this->getMetricsSymbols();
-        /** @var string $adminLocale */
-        $adminLocale = $this->localeManager->getGeneralLocale();
+        /** @var string[] $locales */
+        $locales = $this->storeHelper->getMappedWebsitesStoreLangs();
 
         $this->jobOption->createTable();
 
         foreach ($metricsVariantSettings as $metricsVariantSetting) {
+            $metricsVariantSetting = strtolower($metricsVariantSetting);
             $columnExist = $connection->tableColumnExists($tmpTable, $metricsVariantSetting);
 
             if (!$columnExist) {
@@ -655,9 +634,7 @@ class Product extends Import
                 }
 
                 /** @var string[] $labels */
-                $labels = [];
-
-                $labels[$adminLocale] = $option;
+                $labels = array_fill_keys($locales, $option);
 
                 /** @var mixed[] $insertedData */
                 $insertedData = [
